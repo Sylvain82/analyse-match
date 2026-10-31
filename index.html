@@ -243,14 +243,17 @@ const Core = (() => {
     const headerLine = (firstNl < 0 ? text : text.slice(0, firstNl)).replace(/\r$/, '');
     const sep = headerLine.includes(';') ? ';' : ',';
     const cols = headerLine.split(sep).map(s => s.trim());
-    const need = ['frame', 'time_ms', 'tracker_id', 'role', 'team', 'x_cm', 'y_cm'];
+    const need = ['frame', 'tracker_id', 'role', 'team', 'x_cm', 'y_cm'];
     const missing = need.filter(c => !cols.includes(c));
     if (missing.length) {
       throw new Error('Colonnes manquantes dans le fichier : ' + missing.join(', ') +
-        '. Utilise le fichier positions.csv produit par radar_csv.py.');
+        '. Utilise le fichier positions.csv produit par radar_csv.py (ou positions_nettoyees.csv).');
     }
-    const ix = Object.fromEntries(need.map(c => [c, cols.indexOf(c)]));
-    const d = { frame: [], time: [], tid: [], role: [], team: [], x: [], y: [] };
+    const ix = Object.fromEntries(cols.map((c, i) => [c, i]));
+    // le temps peut venir de time_ms (positions.csv) ou de time_s (positions_nettoyees.csv)
+    const timeSource = cols.includes('time_ms') ? 'ms' : cols.includes('time_s') ? 's' : 'none';
+    const d = { frame: [], time: [], tid: [], role: [], team: [], x: [], y: [],
+                timeSource, alreadyCleaned: cols.includes('segment') };
     const lines = text.split('\n');
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
@@ -261,7 +264,8 @@ const Core = (() => {
       const f = parseInt(p[ix.frame], 10), t = parseInt(p[ix.tracker_id], 10);
       if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(f) || Number.isNaN(t)) continue;
       d.frame.push(f);
-      d.time.push(parseFloat(p[ix.time_ms]));
+      d.time.push(timeSource === 'ms' ? parseFloat(p[ix.time_ms])
+        : timeSource === 's' ? parseFloat(p[ix.time_s]) * 1000 : f * 40);
       d.tid.push(t);
       d.role.push(p[ix.role].trim());
       const tm = p[ix.team].trim();
@@ -630,6 +634,12 @@ const Core = (() => {
       'Une caméra de diffusion ne montre pas toujours tout le terrain, et la projection peut dériver quand la caméra zoome ou change de plan. Les distances sont des estimations à prendre avec prudence.',
     ];
 
+    if (d.alreadyCleaned) {
+      notes.unshift('Ce fichier est déjà nettoyé (positions_nettoyees.csv) : il est analysé tel quel, donc le lissage est appliqué une seconde fois et les arbitres n’y figurent plus. Pour des résultats de référence, dépose le positions.csv d’origine.');
+    }
+    if (d.timeSource === 'none') {
+      notes.unshift('Aucune colonne de temps dans le fichier : 25 images par seconde sont supposées.');
+    }
     return { fps, nFrames, players, teams, teamIds, perSecond, tracks, notes };
   }
 
