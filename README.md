@@ -11,7 +11,7 @@ L'outil se compose de deux parties :
 1. **Sur un PC Windows** : la vidéo est analysée par l'IA et transformée en fichier `positions.csv` (une ligne par joueur et par image). Cette partie demande une installation (voir plus bas) et, idéalement, une carte graphique Nvidia.
 2. **Sur la page web** : le fichier `positions.csv` est déposé sur la page, qui calcule les statistiques directement dans le navigateur. Aucune installation n'est nécessaire.
 
-Page web : `https://<compte>.github.io/<depot>/` (adresse de ce dépôt sur GitHub Pages)
+Page web : `https://sylvain82.github.io/analyse-match/)` (adresse de ce dépôt sur GitHub Pages)
 
 Si tu as déjà un `positions.csv`, la page web suffit.
 
