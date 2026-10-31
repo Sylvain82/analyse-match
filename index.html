@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analyse de match</title>
+<style>
+  :root {
+    --paper: #eef2ee;
+    --panel: #ffffff;
+    --ink: #14281f;
+    --muted: #51655a;
+    --line: #cfd9d1;
+    --turf: #2a6e3f;
+    --turf-dark: #1f5430;
+    --chalk: #f7fbf6;
+    --team0: #0a84c6;
+    --team1: #d4146a;
+    --focus: #0a84c6;
+    --head: Bahnschrift, "DIN Alternate", "Franklin Gothic Medium", "Arial Narrow", system-ui, sans-serif;
+    --body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0e1914;
+      --panel: #16241d;
+      --ink: #e8f0ea;
+      --muted: #9db2a5;
+      --line: #2b4036;
+      --team0: #3aa8e6;
+      --team1: #ff5fa2;
+      --focus: #3aa8e6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0e1914;
+    --panel: #16241d;
+    --ink: #e8f0ea;
+    --muted: #9db2a5;
+    --line: #2b4036;
+    --team0: #3aa8e6;
+    --team1: #ff5fa2;
+    --focus: #3aa8e6;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 1rem; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.55 var(--body);
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  h1, h2, h3 { font-family: var(--head); font-weight: 600; letter-spacing: 0.005em; margin: 0; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; }
+  h2 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+  h3 { font-size: 1.15rem; margin-bottom: 0.5rem; }
+  p { margin: 0 0 0.75rem; max-width: 70ch; }
+  .lede { color: var(--muted); font-size: 1.05rem; max-width: 62ch; margin-top: 0.75rem; }
+  header { margin-bottom: 1.75rem; }
+
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  button, .btn {
+    font: inherit; cursor: pointer; border-radius: 6px; padding: 0.55rem 0.95rem;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  button:hover:not(:disabled), .btn:hover { border-color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .primary { background: var(--turf); border-color: var(--turf); color: #fff; }
+  .primary:hover:not(:disabled) { background: var(--turf-dark); border-color: var(--turf-dark); }
+
+  /* Zone de dépôt : un terrain vide */
+  .dropzone {
+    position: relative; display: block; cursor: pointer;
+    aspect-ratio: 12600 / 7600; width: 100%;
+    background: var(--turf); border-radius: 10px; overflow: hidden;
+  }
+  .dropzone svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .dropzone .pitch-lines * { fill: none; stroke: var(--chalk); stroke-width: 28; opacity: 0.8; }
+  .dropzone .pitch-lines .dot { fill: var(--chalk); stroke: none; }
+  .dropzone.over .pitch-lines * { opacity: 1; stroke-width: 44; }
+  .dropzone .prompt {
+    position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+    padding: 1rem; color: #fff;
+  }
+  .dropzone .prompt-box { background: var(--turf-dark); padding: 1rem 1.75rem; border-radius: 8px; }
+  .dropzone .prompt strong { font-family: var(--head); font-size: clamp(1.3rem, 3.6vw, 2.2rem); font-weight: 600; }
+  .dropzone .prompt span { opacity: 0.9; }
+  .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .dropzone:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .hint { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
+
+  details { margin-top: 1rem; }
+  summary { cursor: pointer; font-weight: 600; }
+  .params { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem 1rem; margin-top: 0.75rem; }
+  .params label { display: grid; gap: 0.2rem; font-size: 0.92rem; }
+  .params input { font: inherit; padding: 0.4rem 0.5rem; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
+  .params .row { grid-column: 1 / -1; }
+
+  .alert { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--team1); background: var(--panel); }
+  .busy { margin-top: 1rem; color: var(--muted); }
+
+  #results[hidden], .alert[hidden], .busy[hidden], #drop[hidden] { display: none; }
+  .bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+  .caution { border-left: 4px solid var(--team0); background: var(--panel); padding: 0.75rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0 1.75rem; }
+  section.block { margin-top: 2.25rem; }
+
+  .viewer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem; }
+  .viewer canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .swatch { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; margin-right: 0.4em; vertical-align: -0.05em; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 0.5rem 0.75rem; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-weight: 600; background: color-mix(in srgb, var(--paper) 60%, var(--panel)); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.l, th.l { text-align: left; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem; }
+  .chart canvas { width: 100%; height: 260px; display: block; }
+  ul.notes { padding-left: 1.2rem; max-width: 78ch; }
+  ul.notes li { margin-bottom: 0.5rem; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: 0.9rem; }
+
+  @media (max-width: 560px) { .wrap { padding: 1.25rem 0.9rem 3rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Analyse de match</h1>
+    <p class="lede">Dépose le fichier <strong>positions.csv</strong> produit sur ton PC. Le calcul se fait dans ton navigateur&nbsp;: le fichier n’est envoyé nulle part et rien n’est enregistré.</p>
+  </header>
+
+  <main>
+    <div id="drop">
+      <label class="dropzone" id="dropzone">
+        <svg viewBox="0 0 12600 7600" preserveAspectRatio="none" aria-hidden="true">
+          <g class="pitch-lines" transform="translate(300 300)">
+            <rect x="0" y="0" width="12000" height="7000"/>
+            <line x1="6000" y1="0" x2="6000" y2="7000"/>
+            <circle cx="6000" cy="3500" r="915"/>
+            <circle class="dot" cx="6000" cy="3500" r="45"/>
+            <rect x="0" y="1450" width="2015" height="4100"/>
+            <rect x="9985" y="1450" width="2015" height="4100"/>
+            <rect x="0" y="2584" width="550" height="1832"/>
+            <rect x="11450" y="2584" width="550" height="1832"/>
+            <circle class="dot" cx="1100" cy="3500" r="45"/>
+            <circle class="dot" cx="10900" cy="3500" r="45"/>
+          </g>
+        </svg>
+        <div class="prompt">
+          <div class="prompt-box">
+            <strong>Dépose positions.csv ici</strong><br>
+            <span>ou clique pour choisir le fichier</span>
+          </div>
+        </div>
+        <input type="file" id="file" accept=".csv,text/csv" aria-label="Choisir le fichier positions.csv">
+      </label>
+      <p class="hint">Pas de fichier&nbsp;? Il se génère avec <code>radar_csv.py</code> à partir d’une vidéo de match.</p>
+    </div>
+
+    <details id="paramsBox">
+      <summary>Réglages du nettoyage</summary>
+      <div class="params">
+        <label>Suivi minimal (images)<input type="number" id="pMinFrames" value="50" min="10" max="2000"></label>
+        <label>Trou maximal comblé (images)<input type="number" id="pMaxGap" value="10" min="0" max="100"></label>
+        <label>Écart aberrant (cm)<input type="number" id="pOutlier" value="150" min="30" max="2000"></label>
+        <label>Saut impossible entre 2 images (cm)<input type="number" id="pJump" value="150" min="30" max="2000"></label>
+        <label>Tronçon minimal (images)<input type="number" id="pSegment" value="25" min="5" max="500"></label>
+        <div class="row"><button type="button" id="apply" disabled>Appliquer les réglages</button></div>
+      </div>
+    </details>
+
+    <div class="busy" id="busy" role="status" hidden>Analyse en cours…</div>
+    <div class="alert" id="error" role="alert" hidden></div>
+
+    <div id="results" hidden>
+      <div class="bar">
+        <button type="button" class="primary" id="dlXlsx">Télécharger le classeur Excel</button>
+        <button type="button" id="dlCsv">Télécharger les positions nettoyées (CSV)</button>
+        <button type="button" id="another">Charger un autre fichier</button>
+      </div>
+      <p id="summary"></p>
+      <div class="caution">
+        Les positions viennent d’une projection sur le terrain qui peut se tromper quand la caméra zoome ou change de plan.
+        Les statistiques d’équipe sont les plus fiables&nbsp;; les distances et les vitesses sont des estimations, la vitesse maximale surtout.
+      </div>
+
+      <section class="block" aria-labelledby="hCartes">
+        <h2 id="hCartes">Cartes</h2>
+        <div class="viewer">
+          <div class="seg" id="viewSwitch" role="group" aria-label="Choisir la carte"></div>
+          <canvas id="pitch" width="1260" height="760" role="img" aria-label="Terrain de football avec la carte choisie"></canvas>
+          <div class="bar"><button type="button" id="dlPng">Enregistrer l’image</button></div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="hEquipes">
+        <h2 id="hEquipes">Équipes</h2>
+        <div class="tablewrap"><table id="teamsTable"></table></div>
+      </section>
+
+      <section class="block" aria-labelledby="hEvol">
+        <h2 id="hEvol">Évolution dans le temps</h2>
+        <div class="chart">
+          <div class="seg" id="metricSwitch" role="group" aria-label="Choisir l’indicateur"></div>
+          <canvas id="chart"></canvas>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="hJoueurs">
+        <h2 id="hJoueurs">Joueurs</h2>
+        <div class="tablewrap"><table id="playersTable"></table></div>
+      </section>
+
+      <section class="block" aria-labelledby="hMethode">
+        <h2 id="hMethode">Méthode et limites</h2>
+        <ul class="notes" id="notes"></ul>
+      </section>
+    </div>
+  </main>
+
+  <footer>Les calculs s’exécutent localement. Seule la bibliothèque d’export Excel est chargée depuis internet (le code, jamais tes données).</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+
+<script id="core">
+/* ============================================================================
+   Noyau d'analyse : aucune dependance au navigateur (testable sous Node).
+   Portage de analyse_positions.py.
+   ========================================================================== */
+const Core = (() => {
+  const PITCH_L = 12000, PITCH_W = 7000;
+
+  function parseCSV(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const firstNl = text.indexOf('\n');
+    const headerLine = (firstNl < 0 ? text : text.slice(0, firstNl)).replace(/\r$/, '');
+    const sep = headerLine.includes(';') ? ';' : ',';
+    const cols = headerLine.split(sep).map(s => s.trim());
+    const need = ['frame', 'time_ms', 'tracker_id', 'role', 'team', 'x_cm', 'y_cm'];
+    const missing = need.filter(c => !cols.includes(c));
+    if (missing.length) {
+      throw new Error('Colonnes manquantes dans le fichier : ' + missing.join(', ') +
+        '. Utilise le fichier positions.csv produit par radar_csv.py.');
+    }
+    const ix = Object.fromEntries(need.map(c => [c, cols.indexOf(c)]));
+    const d = { frame: [], time: [], tid: [], role: [], team: [], x: [], y: [] };
+    const lines = text.split('\n');
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line || line === '\r') continue;
+      const p = line.replace(/\r$/, '').split(sep);
+      if (p.length < cols.length) continue;
+      const x = parseFloat(p[ix.x_cm]), y = parseFloat(p[ix.y_cm]);
+      const f = parseInt(p[ix.frame], 10), t = parseInt(p[ix.tracker_id], 10);
+      if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(f) || Number.isNaN(t)) continue;
+      d.frame.push(f);
+      d.time.push(parseFloat(p[ix.time_ms]));
+      d.tid.push(t);
+      d.role.push(p[ix.role].trim());
+      const tm = p[ix.team].trim();
+      d.team.push(tm === '' ? NaN : parseFloat(tm));
+      d.x.push(x);
+      d.y.push(y);
+    }
+    d.n = d.frame.length;
+    if (d.n === 0) throw new Error('Le fichier ne contient aucune ligne exploitable.');
+    return d;
+  }
+
+  function estimateFps(d) {
+    let fMin = Infinity, fMax = -Infinity, tMin = 0, tMax = 0;
+    for (let i = 0; i < d.n; i++) {
+      if (d.frame[i] < fMin) { fMin = d.frame[i]; tMin = d.time[i]; }
+      if (d.frame[i] > fMax) { fMax = d.frame[i]; tMax = d.time[i]; }
+    }
+    const secs = (tMax - tMin) / 1000;
+    return secs > 0 ? (fMax - fMin) / secs : 25;
+  }
+
+  function majority(counts) {
+    let best = NaN, bc = -1;
+    for (const [k, c] of counts) {
+      if (c > bc || (c === bc && k < best)) { best = k; bc = c; }
+    }
+    return best;
+  }
+
+  function fixLabels(d) {
+    const teamCounts = new Map(), roleCounts = new Map();
+    for (let i = 0; i < d.n; i++) {
+      if (d.role[i] === 'arbitre') continue;
+      const id = d.tid[i];
+      if (!roleCounts.has(id)) { roleCounts.set(id, new Map()); teamCounts.set(id, new Map()); }
+      const rc = roleCounts.get(id);
+      rc.set(d.role[i], (rc.get(d.role[i]) || 0) + 1);
+      if (!Number.isNaN(d.team[i])) {
+        const tc = teamCounts.get(id);
+        tc.set(d.team[i], (tc.get(d.team[i]) || 0) + 1);
+      }
+    }
+    const teamCorr = new Map(), roleCorr = new Map();
+    for (const [id, rc] of roleCounts) {
+      roleCorr.set(id, majority(rc));
+      teamCorr.set(id, majority(teamCounts.get(id)));
+    }
+    let nTeamFixed = 0, nRoleFixed = 0;
+    for (let i = 0; i < d.n; i++) {
+      if (d.role[i] === 'arbitre') continue;
+      if (!(d.team[i] === teamCorr.get(d.tid[i]))) nTeamFixed++;
+      if (d.role[i] !== roleCorr.get(d.tid[i])) nRoleFixed++;
+    }
+    return { teamCorr, roleCorr, nTeamFixed, nRoleFixed };
+  }
+
+  const oddInt = n => { n = Math.max(Math.round(n), 3); return n % 2 === 1 ? n : n + 1; };
+  const r1 = v => Number.isFinite(v) ? Math.round(v * 10) / 10 : null;
+
+  function median(a) {
+    const s = Float64Array.from(a).sort();
+    const n = s.length, m = n >> 1;
+    return n % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  function contiguousRuns(mask) {
+    const runs = [];
+    let start = -1;
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] && start < 0) start = i;
+      if (!mask[i] && start >= 0) { runs.push([start, i]); start = -1; }
+    }
+    if (start >= 0) runs.push([start, mask.length]);
+    return runs;
+  }
+
+  // Points trop eloignes de la mediane glissante de leur trajectoire
+  function outlierMask(x, y, win, thresh) {
+    const n = x.length, half = (win - 1) >> 1, bad = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      if (Number.isNaN(x[i])) continue;
+      const xs = [], ys = [];
+      for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+        if (!Number.isNaN(x[j])) { xs.push(x[j]); ys.push(y[j]); }
+      }
+      if (xs.length < 3) continue;
+      if (Math.hypot(x[i] - median(xs), y[i] - median(ys)) > thresh) bad[i] = 1;
+    }
+    return bad;
+  }
+
+  function medianFilter(a, w) {
+    const n = a.length, h = (w - 1) >> 1, out = new Float64Array(n), buf = new Float64Array(w);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < w; j++) {
+        buf[j] = a[Math.min(n - 1, Math.max(0, i + j - h))];
+      }
+      buf.sort();
+      out[i] = buf[h];
+    }
+    return out;
+  }
+
+  // Savitzky-Golay, ordre 2, bords par ajustement polynomial (comme scipy mode='interp')
+  function savgol(y, w) {
+    const n = y.length, m = (w - 1) / 2, out = new Float64Array(n);
+    const den = (2 * m + 3) * (2 * m + 1) * (2 * m - 1);
+    const c = [];
+    for (let k = -m; k <= m; k++) c.push(3 * (3 * m * m + 3 * m - 1 - 5 * k * k) / den);
+    for (let i = m; i < n - m; i++) {
+      let s = 0;
+      for (let k = -m; k <= m; k++) s += c[k + m] * y[i + k];
+      out[i] = s;
+    }
+    let S2 = 0, S4 = 0;
+    for (let t = -m; t <= m; t++) { S2 += t * t; S4 += t * t * t * t; }
+    const S0 = w, det = S0 * S4 - S2 * S2;
+    const fit = (start) => {
+      let T0 = 0, T1 = 0, T2 = 0;
+      for (let t = -m; t <= m; t++) {
+        const v = y[start + t + m];
+        T0 += v; T1 += t * v; T2 += t * t * v;
+      }
+      return { a: (T0 * S4 - S2 * T2) / det, b: T1 / S2, c: (S0 * T2 - S2 * T0) / det };
+    };
+    const head = fit(0);
+    for (let i = 0; i < m && i < n; i++) {
+      const t = i - m; out[i] = head.a + head.b * t + head.c * t * t;
+    }
+    const tail = fit(n - w);
+    for (let i = n - m; i < n; i++) {
+      if (i < m) continue;
+      const t = (i - (n - w)) - m; out[i] = tail.a + tail.b * t + tail.c * t * t;
+    }
+    return out;
+  }
+
+  function smoothSegment(ax, ay, medWin, sgWin) {
+    const n = ax.length;
+    let x = Float64Array.from(ax), y = Float64Array.from(ay);
+    if (n >= 5) {
+      const w = Math.min(medWin, n % 2 === 1 ? n : n - 1);
+      x = medianFilter(x, w); y = medianFilter(y, w);
+    }
+    const w = Math.min(sgWin, n % 2 === 1 ? n : n - 1);
+    if (w >= 5) { x = savgol(x, w); y = savgol(y, w); }
+    return [x, y];
+  }
+
+  function interpInside(a) {
+    const out = Float64Array.from(a);
+    let prev = -1;
+    for (let i = 0; i < a.length; i++) {
+      if (Number.isNaN(a[i])) continue;
+      if (prev >= 0 && i - prev > 1) {
+        for (let k = prev + 1; k < i; k++) out[k] = a[prev] + (a[i] - a[prev]) * (k - prev) / (i - prev);
+      }
+      prev = i;
+    }
+    return out;
+  }
+
+  function cleanTrack(frames, xs, ys, P) {
+    const f0 = Math.min(...frames), f1 = frames.reduce((m, v) => v > m ? v : m, -Infinity);
+    const n = f1 - f0 + 1;
+    let x = new Float64Array(n).fill(NaN), y = new Float64Array(n).fill(NaN);
+    for (let i = 0; i < frames.length; i++) {
+      const k = frames[i] - f0;
+      if (Number.isNaN(x[k])) {
+        x[k] = Math.min(PITCH_L, Math.max(0, xs[i]));
+        y[k] = Math.min(PITCH_W, Math.max(0, ys[i]));
+      }
+    }
+    let nOut = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      const bad = outlierMask(x, y, P.hampelWin, P.outlierCm);
+      for (let i = 0; i < n; i++) if (bad[i]) { x[i] = NaN; y[i] = NaN; nOut++; }
+    }
+    const observed = new Uint8Array(n);
+    for (let i = 0; i < n; i++) observed[i] = Number.isNaN(x[i]) ? 0 : 1;
+
+    const ax = interpInside(x), ay = interpInside(y);
+    for (const [a, b] of contiguousRuns(Array.from(observed, v => !v))) {
+      if (b - a > P.maxGap) for (let i = a; i < b; i++) { ax[i] = NaN; ay[i] = NaN; }
+    }
+    const valid = Array.from(ax, v => !Number.isNaN(v));
+    const cut = new Uint8Array(n);
+    let nJumps = 0;
+    for (let i = 1; i < n; i++) {
+      if (valid[i] && valid[i - 1] && Math.hypot(ax[i] - ax[i - 1], ay[i] - ay[i - 1]) > P.jumpCm) {
+        cut[i] = 1; nJumps++;
+      }
+    }
+    const ox = new Float64Array(n).fill(NaN), oy = new Float64Array(n).fill(NaN);
+    const segment = new Int32Array(n).fill(-1);
+    let segId = 0;
+    for (const [a, b] of contiguousRuns(valid)) {
+      const bounds = [a];
+      for (let i = a + 1; i < b; i++) if (cut[i]) bounds.push(i);
+      bounds.push(b);
+      for (let k = 0; k < bounds.length - 1; k++) {
+        const lo = bounds[k], hi = bounds[k + 1];
+        if (hi - lo >= P.minSegment) {
+          const [sx, sy] = smoothSegment(ax.subarray(lo, hi), ay.subarray(lo, hi), P.medWin, P.sgWin);
+          for (let i = lo; i < hi; i++) { ox[i] = sx[i - lo]; oy[i] = sy[i - lo]; segment[i] = segId; }
+          segId++;
+        }
+      }
+    }
+    const interpole = new Uint8Array(n);
+    for (let i = 0; i < n; i++) interpole[i] = (segment[i] >= 0 && !observed[i]) ? 1 : 0;
+    return { f0, n, x: ox, y: oy, segment, interpole, nOut, nJumps };
+  }
+
+  function trackMetrics(res, fps) {
+    const n = res.n, v = new Float64Array(n).fill(NaN);
+    let dist = 0, validFrames = 0, nInterp = 0;
+    for (let i = 0; i < n; i++) {
+      if (res.segment[i] >= 0) validFrames++;
+      nInterp += res.interpole[i];
+      if (i > 0 && res.segment[i] >= 0 && res.segment[i] === res.segment[i - 1]) {
+        const step = Math.hypot(res.x[i] - res.x[i - 1], res.y[i] - res.y[i - 1]);
+        dist += step;
+        v[i] = step * fps / 100 * 3.6;
+      }
+    }
+    res.v = v;
+    const distance = dist / 100, duration = validFrames / fps;
+    const w = Math.max(Math.round(1.0 * fps), 3), minP = Math.floor(w / 2), half = Math.floor(w / 2);
+    let vmax = NaN;
+    for (let i = 0; i < n; i++) {
+      let s = 0, c = 0;
+      for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i - half + w - 1); j++) {
+        if (!Number.isNaN(v[j])) { s += v[j]; c++; }
+      }
+      if (c >= minP && c > 0) { const m = s / c; if (Number.isNaN(vmax) || m > vmax) vmax = m; }
+    }
+    return {
+      images_validees: validFrames,
+      couverture_pct: r1(100 * validFrames / Math.max(n, 1)),
+      distance_validee_m: r1(distance),
+      distance_extrapolee_m: r1(distance * n / Math.max(validFrames, 1)),
+      vitesse_moy_kmh: duration > 0 ? r1(distance / duration * 3.6) : null,
+      vitesse_max_kmh: r1(vmax),
+      pct_interpole: r1(100 * nInterp / Math.max(validFrames, 1)),
+    };
+  }
+
+  const fr = (v, d = 1) => v.toFixed(d).replace('.', ',');
+  const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+
+  function analyse(d, params, log = () => {}) {
+    const fps = estimateFps(d);
+    const nFrames = new Set(d.frame).size;
+    log(`${d.n} lignes, ${nFrames} images, ${fps.toFixed(1)} images/s`);
+    const lab = fixLabels(d);
+
+    const P = {
+      medWin: oddInt(0.4 * fps), sgWin: oddInt(1.5 * fps), hampelWin: oddInt(1.0 * fps),
+      maxGap: params.maxGap, outlierCm: params.outlierCm, jumpCm: params.jumpCm,
+      minSegment: params.minSegment,
+    };
+
+    // regroupement par joueur
+    const rowsByTid = new Map();
+    for (let i = 0; i < d.n; i++) {
+      if (d.role[i] === 'arbitre') continue;
+      if (!rowsByTid.has(d.tid[i])) rowsByTid.set(d.tid[i], []);
+      rowsByTid.get(d.tid[i]).push(i);
+    }
+    const tids = Array.from(rowsByTid.keys()).sort((a, b) => a - b);
+
+    const tracks = [], players = [], ignored = [];
+    for (const tid of tids) {
+      const rows = rowsByTid.get(tid);
+      const nUnique = new Set(rows.map(i => d.frame[i])).size;
+      if (nUnique < params.minFrames) { ignored.push([tid, nUnique]); continue; }
+      const res = cleanTrack(rows.map(i => d.frame[i]), rows.map(i => d.x[i]), rows.map(i => d.y[i]), P);
+      const m = trackMetrics(res, fps);
+      const team = lab.teamCorr.get(tid), role = lab.roleCorr.get(tid);
+      res.tid = tid; res.team = team; res.role = role;
+      tracks.push(res);
+      players.push({
+        joueur_id: tid, role, equipe: Number.isNaN(team) ? null : team, ...m,
+        positions_ecartees: res.nOut, sauts_detectes: res.nJumps,
+      });
+    }
+    if (!tracks.length) throw new Error('Aucun suivi assez long pour être analysé. Essaie de baisser le « suivi minimal » dans les réglages.');
+
+    const cmp = (a, b) => {
+      const ta = a.equipe === null ? Infinity : a.equipe, tb = b.equipe === null ? Infinity : b.equipe;
+      if (ta !== tb) return ta - tb;
+      if (a.role !== b.role) return a.role < b.role ? -1 : 1;
+      return a.joueur_id - b.joueur_id;
+    };
+    players.sort(cmp);
+
+    // statistiques d'equipe image par image (joueurs de champ, positions fiables)
+    const byTeamFrame = new Map();
+    for (const t of tracks) {
+      if (t.role !== 'joueur' || Number.isNaN(t.team)) continue;
+      for (let i = 0; i < t.n; i++) {
+        if (t.segment[i] < 0) continue;
+        const key = t.team + '|' + (t.f0 + i);
+        let e = byTeamFrame.get(key);
+        if (!e) { e = { team: t.team, frame: t.f0 + i, x: [], y: [] }; byTeamFrame.set(key, e); }
+        e.x.push(t.x[i]); e.y.push(t.y[i]);
+      }
+    }
+    const frameStats = [];
+    for (const e of byTeamFrame.values()) {
+      if (e.x.length < 3) continue;
+      const cx = mean(e.x), cy = mean(e.y);
+      frameStats.push({
+        equipe: e.team, frame: e.frame, joueurs: e.x.length,
+        centre_x_m: cx / 100, centre_y_m: cy / 100,
+        largeur_m: (Math.max(...e.y) - Math.min(...e.y)) / 100,
+        profondeur_m: (Math.max(...e.x) - Math.min(...e.x)) / 100,
+        compacite_m: mean(e.x.map((v, i) => Math.hypot(v - cx, e.y[i] - cy))) / 100,
+      });
+    }
+    frameStats.sort((a, b) => a.equipe - b.equipe || a.frame - b.frame);
+    const teamIds = Array.from(new Set(frameStats.map(s => s.equipe))).sort((a, b) => a - b);
+
+    const teams = teamIds.map(team => {
+      const fs = frameStats.filter(s => s.equipe === team);
+      const pl = players.filter(p => p.equipe === team && p.role === 'joueur');
+      const avg = k => r1(mean(pl.map(p => p[k]).filter(v => v !== null)));
+      return {
+        equipe: team,
+        joueurs_suivis: pl.length,
+        effectif_moyen_par_image: r1(mean(fs.map(s => s.joueurs))),
+        centre_x_moyen_m: r1(mean(fs.map(s => s.centre_x_m))),
+        centre_y_moyen_m: r1(mean(fs.map(s => s.centre_y_m))),
+        largeur_moyenne_m: r1(mean(fs.map(s => s.largeur_m))),
+        profondeur_moyenne_m: r1(mean(fs.map(s => s.profondeur_m))),
+        compacite_moyenne_m: r1(mean(fs.map(s => s.compacite_m))),
+        distance_validee_moy_m: avg('distance_validee_m'),
+        distance_extrapolee_moy_m: avg('distance_extrapolee_m'),
+        vitesse_moy_kmh: avg('vitesse_moy_kmh'),
+        couverture_moy_pct: avg('couverture_pct'),
+      };
+    });
+
+    const fpsInt = Math.round(fps);
+    const perSecond = frameStats.filter(s => s.frame % fpsInt === 0).map(s => ({
+      equipe: s.equipe, temps_s: r1(s.frame / fps), joueurs: s.joueurs,
+      centre_x_m: r1(s.centre_x_m), centre_y_m: r1(s.centre_y_m),
+      largeur_m: r1(s.largeur_m), profondeur_m: r1(s.profondeur_m), compacite_m: r1(s.compacite_m),
+    }));
+
+    const notes = [
+      `${nFrames} images à ${fr(fps)} images/s, soit ${fr(nFrames / fps)} s de vidéo.`,
+      `Équipe et rôle : valeur majoritaire pour chaque joueur suivi (${lab.nTeamFixed} équipes et ${lab.nRoleFixed} rôles corrigés). Les arbitres sont exclus de l’analyse.`,
+      `Suivis ignorés car trop courts (moins de ${params.minFrames} images) : ` +
+        (ignored.length ? ignored.map(([t, n]) => `n°${t} (${n} images)`).join(', ') : 'aucun') + '.',
+      `Positions ramenées dans le terrain (0 à ${PITCH_L} cm sur x, 0 à ${PITCH_W} cm sur y). Les trous de ${params.maxGap} images ou moins sont comblés par interpolation.`,
+      `Positions aberrantes : un point à plus de ${params.outlierCm} cm de la médiane de sa trajectoire (sur environ 1 s) est écarté puis remplacé par interpolation.`,
+      `Lissage : filtre médian (${P.medWin} images) puis Savitzky-Golay (${P.sgWin} images). Sans lissage, le bruit de détection gonfle fortement les distances.`,
+      `Tronçons : la trajectoire est coupée à chaque déplacement de plus de ${params.jumpCm} cm en une image (erreur de projection ou échange d’identifiant). Les tronçons de moins de ${params.minSegment} images sont abandonnés.`,
+      'Distance validée : somme des déplacements dans les tronçons fiables (la couverture indique la part de la vidéo concernée). Distance extrapolée : cette distance ramenée à toute la durée du suivi, à titre indicatif.',
+      'Vitesse maximale : moyenne glissante de 1 s. C’est la mesure la moins fiable, car une erreur de projection isolée peut la gonfler.',
+      'Largeur et profondeur d’équipe : écart entre les joueurs de champ extrêmes (gardiens exclus). Compacité : distance moyenne des joueurs au centre de l’équipe.',
+      'Les axes x et y sont ceux du terrain projeté depuis la vidéo : le sens de jeu n’est pas connu, donc l’avant et l’arrière ne sont pas distingués.',
+      'Une caméra de diffusion ne montre pas toujours tout le terrain, et la projection peut dériver quand la caméra zoome ou change de plan. Les distances sont des estimations à prendre avec prudence.',
+    ];
+
+    return { fps, nFrames, players, teams, teamIds, perSecond, tracks, notes };
+  }
+
+  // ---- cartes de chaleur -----------------------------------------------------
+  const GX = 60, GY = 35;
+
+  function gaussian1d(sigma) {
+    const r = Math.floor(4 * sigma + 0.5), k = [];
+    let s = 0;
+    for (let i = -r; i <= r; i++) { const v = Math.exp(-0.5 * (i / sigma) ** 2); k.push(v); s += v; }
+    return { r, k: k.map(v => v / s) };
+  }
+
+  function heatGrid(tracks, team) {
+    const g = new Float64Array(GX * GY);
+    for (const t of tracks) {
+      if (t.team !== team || t.role !== 'joueur') continue;
+      for (let i = 0; i < t.n; i++) {
+        if (t.segment[i] < 0) continue;
+        let ix = Math.floor(t.x[i] / (PITCH_L / GX)), iy = Math.floor(t.y[i] / (PITCH_W / GY));
+        ix = Math.min(GX - 1, Math.max(0, ix)); iy = Math.min(GY - 1, Math.max(0, iy));
+        g[iy * GX + ix] += 1;
+      }
+    }
+    const { r, k } = gaussian1d(1.5);
+    const refl = (i, n) => { if (i < 0) return -i - 1; if (i >= n) return 2 * n - i - 1; return i; };
+    const tmp = new Float64Array(GX * GY), out = new Float64Array(GX * GY);
+    for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
+      let s = 0;
+      for (let j = -r; j <= r; j++) s += k[j + r] * g[y * GX + refl(x + j, GX)];
+      tmp[y * GX + x] = s;
+    }
+    for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
+      let s = 0;
+      for (let j = -r; j <= r; j++) s += k[j + r] * tmp[refl(y + j, GY) * GX + x];
+      out[y * GX + x] = s;
+    }
+    let mx = 0;
+    for (const v of out) if (v > mx) mx = v;
+    if (mx > 0) for (let i = 0; i < out.length; i++) out[i] /= mx;
+    return out;
+  }
+
+  return { PITCH_L, PITCH_W, GX, GY, parseCSV, analyse, heatGrid };
+})();
+</script>
+
+<script>
+/* ============================================================================
+   Interface
+   ========================================================================== */
+(() => {
+  const $ = id => document.getElementById(id);
+  const L = Core.PITCH_L, W = Core.PITCH_W;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const TEAM_COLORS = ['#0a84c6', '#d4146a'];
+  const teamColor = t => TEAM_COLORS[t] || '#888888';
+
+  let parsed = null, result = null, fileName = '', view = null, metric = 'largeur_m';
+
+  const fmt = (v, digits = 1) => v === null || v === undefined || Number.isNaN(v)
+    ? '–' : Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+
+  // ---- chargement ---------------------------------------------------------
+  const dropzone = $('dropzone'), fileInput = $('file');
+  ['dragenter', 'dragover'].forEach(e => dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(e => dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('over'); }));
+  dropzone.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) load(f); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) load(fileInput.files[0]); });
+  $('another').addEventListener('click', reset);
+  $('apply').addEventListener('click', () => run());
+
+  function showError(msg) { const e = $('error'); e.textContent = msg; e.hidden = !msg; }
+  const nextPaint = () => new Promise(r => setTimeout(r, 30));
+
+  async function load(file) {
+    showError('');
+    $('busy').hidden = false; $('busy').textContent = 'Lecture du fichier…';
+    await nextPaint();
+    try {
+      fileName = file.name;
+      parsed = Core.parseCSV(await file.text());
+      await run();
+    } catch (err) {
+      $('busy').hidden = true;
+      showError(err.message);
+    }
+  }
+
+  function params() {
+    const n = (id, d) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : d; };
+    return {
+      minFrames: n('pMinFrames', 50), maxGap: n('pMaxGap', 10), outlierCm: n('pOutlier', 150),
+      jumpCm: n('pJump', 150), minSegment: n('pSegment', 25),
+    };
+  }
+
+  async function run() {
+    if (!parsed) return;
+    showError('');
+    $('busy').hidden = false; $('busy').textContent = 'Analyse en cours…';
+    await nextPaint();
+    try {
+      result = Core.analyse(parsed, params());
+    } catch (err) {
+      $('busy').hidden = true;
+      showError(err.message);
+      return;
+    }
+    $('busy').hidden = true;
+    $('drop').hidden = true;
+    $('apply').disabled = false;
+    $('results').hidden = false;
+    render();
+  }
+
+  function reset() {
+    parsed = null; result = null; fileInput.value = '';
+    $('results').hidden = true; $('drop').hidden = false; $('apply').disabled = true;
+    showError('');
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---- affichage ------------------------------------------------------------
+  function render() {
+    $('summary').textContent =
+      `${fileName} : ${result.nFrames} images, soit ${(result.nFrames / result.fps).toFixed(0)} s à ${result.fps.toFixed(1).replace('.', ',')} images/s.`;
+    buildViewSwitch();
+    buildMetricSwitch();
+    drawView();
+    drawTeamsTable();
+    drawPlayersTable();
+    drawChart();
+    const ul = $('notes'); ul.textContent = '';
+    for (const n of result.notes) { const li = document.createElement('li'); li.textContent = n; ul.appendChild(li); }
+  }
+
+  function segButton(parent, label, pressed, onClick, color) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    if (color) { const s = document.createElement('span'); s.className = 'swatch'; s.style.background = color; b.appendChild(s); }
+    b.appendChild(document.createTextNode(label));
+    b.addEventListener('click', onClick);
+    parent.appendChild(b);
+  }
+
+  function buildViewSwitch() {
+    const box = $('viewSwitch'); box.textContent = '';
+    const views = result.teamIds.map(t => ({ key: 'heat' + t, team: t, label: `Carte de chaleur, équipe ${t}`, color: teamColor(t) }));
+    views.push({ key: 'traj', label: 'Trajectoires fiables' });
+    if (!view || !views.some(v => v.key === view)) view = views[0].key;
+    for (const v of views) {
+      segButton(box, v.label, v.key === view, () => { view = v.key; buildViewSwitch(); drawView(); }, v.color);
+    }
+  }
+
+  function buildMetricSwitch() {
+    const box = $('metricSwitch'); box.textContent = '';
+    const ms = [['largeur_m', 'Largeur'], ['profondeur_m', 'Profondeur'], ['compacite_m', 'Compacité']];
+    for (const [k, label] of ms) {
+      segButton(box, label, k === metric, () => { metric = k; buildMetricSwitch(); drawChart(); });
+    }
+  }
+
+  // ---- terrain ----------------------------------------------------------------
+  const S = 0.1, OFF = 300;               // 1 pixel = 10 cm, marge de 3 m
+  const px = v => (v + OFF) * S;
+
+  function drawPitch(ctx) {
+    ctx.fillStyle = '#2a6e3f';
+    ctx.fillRect(0, 0, (L + 2 * OFF) * S, (W + 2 * OFF) * S);
+    ctx.strokeStyle = '#f7fbf6'; ctx.lineWidth = 2.5; ctx.fillStyle = '#f7fbf6';
+    const rect = (x, y, w, h) => ctx.strokeRect(px(x), px(y), w * S, h * S);
+    rect(0, 0, L, W);
+    ctx.beginPath(); ctx.moveTo(px(L / 2), px(0)); ctx.lineTo(px(L / 2), px(W)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px(L / 2), px(W / 2), 915 * S, 0, 2 * Math.PI); ctx.stroke();
+    rect(0, (W - 4100) / 2, 2015, 4100); rect(L - 2015, (W - 4100) / 2, 2015, 4100);
+    rect(0, (W - 1832) / 2, 550, 1832); rect(L - 550, (W - 1832) / 2, 550, 1832);
+    for (const x of [L / 2, 1100, L - 1100]) {
+      ctx.beginPath(); ctx.arc(px(x), px(W / 2), 3, 0, 2 * Math.PI); ctx.fill();
+    }
+  }
+
+  const RAMP = ['#ffffcc', '#ffeda0', '#fed976', '#feb24c', '#fd8d3c', '#fc4e2a', '#e31a1c', '#bd0026', '#800026']
+    .map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+  function ramp(t) {
+    const p = Math.min(Math.max(t, 0), 1) * (RAMP.length - 1), i = Math.min(Math.floor(p), RAMP.length - 2), f = p - i;
+    return RAMP[i].map((c, k) => Math.round(c + (RAMP[i + 1][k] - c) * f));
+  }
+
+  function drawView() {
+    const cv = $('pitch'), ctx = cv.getContext('2d');
+    drawPitch(ctx);
+    if (view === 'traj') {
+      ctx.lineJoin = 'round';
+      for (const t of result.tracks) {
+        const color = Number.isNaN(t.team) ? '#aaaaaa' : teamColor(t.team);
+        let i = 0;
+        while (i < t.n) {
+          if (t.segment[i] < 0) { i++; continue; }
+          const seg = t.segment[i];
+          let j = i;
+          ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+          ctx.moveTo(px(t.x[i]), px(t.y[i]));
+          while (j + 1 < t.n && t.segment[j + 1] === seg) { j++; ctx.lineTo(px(t.x[j]), px(t.y[j])); }
+          ctx.stroke();
+          ctx.fillStyle = color; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(px(t.x[i]), px(t.y[i]), 3, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+          i = j + 1;
+        }
+      }
+    } else {
+      const team = parseInt(view.slice(4), 10);
+      const grid = Core.heatGrid(result.tracks, team);
+      const off = document.createElement('canvas'); off.width = Core.GX; off.height = Core.GY;
+      const octx = off.getContext('2d'), img = octx.createImageData(Core.GX, Core.GY);
+      for (let i = 0; i < grid.length; i++) {
+        const v = grid[i];
+        if (v < 0.04) { img.data[i * 4 + 3] = 0; continue; }
+        const [r, g, b] = ramp(v);
+        img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 215;
+      }
+      octx.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(off, px(0), px(0), L * S, W * S);
+    }
+  }
+
+  $('dlPng').addEventListener('click', () => {
+    $('pitch').toBlob(b => saveBlob(b, (view === 'traj' ? 'trajectoires' : 'carte_chaleur_equipe_' + view.slice(4)) + '.png'));
+  });
+
+  // ---- tableaux -----------------------------------------------------------------
+  function el(tag, text, cls) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; }
+
+  function drawTeamsTable() {
+    const t = $('teamsTable'); t.textContent = '';
+    const head = el('tr'); head.appendChild(el('th', 'Indicateur'));
+    for (const id of result.teamIds) {
+      const th = el('th'); const s = el('span', '', 'swatch'); s.style.background = teamColor(id);
+      th.appendChild(s); th.appendChild(document.createTextNode('Équipe ' + id)); head.appendChild(th);
+    }
+    const thead = el('thead'); thead.appendChild(head); t.appendChild(thead);
+    const rows = [
+      ['joueurs_suivis', 'Joueurs de champ suivis', 'joueurs'],
+      ['effectif_moyen_par_image', 'Joueurs détectés par image (moyenne)', ''],
+      ['largeur_moyenne_m', 'Largeur moyenne', 'm'],
+      ['profondeur_moyenne_m', 'Profondeur moyenne', 'm'],
+      ['compacite_moyenne_m', 'Compacité moyenne', 'm'],
+      ['centre_x_moyen_m', 'Centre de l’équipe, axe x', 'm'],
+      ['centre_y_moyen_m', 'Centre de l’équipe, axe y', 'm'],
+      ['distance_validee_moy_m', 'Distance validée par joueur', 'm'],
+      ['distance_extrapolee_moy_m', 'Distance extrapolée par joueur', 'm'],
+      ['vitesse_moy_kmh', 'Vitesse moyenne', 'km/h'],
+      ['couverture_moy_pct', 'Part de vidéo exploitable', '%'],
+    ];
+    const tb = el('tbody');
+    for (const [key, label, unit] of rows) {
+      const tr = el('tr'); tr.appendChild(el('td', unit ? `${label} (${unit})` : label));
+      for (const team of result.teams) tr.appendChild(el('td', fmt(team[key])));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb);
+  }
+
+  const PLAYER_COLS = [
+    ['joueur_id', 'Joueur', 'Numéro d’identifiant donné par le suivi'],
+    ['role', 'Rôle', ''],
+    ['equipe', 'Équipe', ''],
+    ['couverture_pct', 'Couverture (%)', 'Part de la vidéo où la position est fiable'],
+    ['distance_validee_m', 'Distance validée (m)', 'Somme des déplacements fiables'],
+    ['distance_extrapolee_m', 'Distance extrapolée (m)', 'Ramenée à toute la durée du suivi, indicatif'],
+    ['vitesse_moy_kmh', 'Vitesse moy. (km/h)', ''],
+    ['vitesse_max_kmh', 'Vitesse max (km/h)', 'Mesure la moins fiable'],
+    ['pct_interpole', 'Interpolé (%)', 'Part des positions reconstituées'],
+    ['positions_ecartees', 'Positions écartées', 'Points jugés aberrants'],
+    ['sauts_detectes', 'Sauts détectés', 'Coupures de trajectoire'],
+  ];
+
+  function drawPlayersTable() {
+    const t = $('playersTable'); t.textContent = '';
+    const head = el('tr');
+    for (const [, label, tip] of PLAYER_COLS) { const th = el('th', label); if (tip) th.title = tip; head.appendChild(th); }
+    const thead = el('thead'); thead.appendChild(head); t.appendChild(thead);
+    const tb = el('tbody');
+    for (const p of result.players) {
+      const tr = el('tr');
+      for (const [key] of PLAYER_COLS) {
+        let v = p[key], td;
+        if (key === 'equipe') {
+          td = el('td'); if (v !== null) { const s = el('span', '', 'swatch'); s.style.background = teamColor(v); td.appendChild(s); td.appendChild(document.createTextNode(String(v))); } else td.textContent = '–';
+        } else if (key === 'role') td = el('td', v);
+        else td = el('td', fmt(v, key === 'joueur_id' ? 0 : 1));
+        tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb);
+  }
+
+  // ---- graphique d'evolution ------------------------------------------------------
+  function drawChart() {
+    const cv = $('chart'), dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    const ink = css('--ink'), muted = css('--muted'), line = css('--line');
+    ctx.clearRect(0, 0, w, h);
+    const pts = result.perSecond;
+    if (!pts.length) { ctx.fillStyle = muted; ctx.font = '14px sans-serif'; ctx.fillText('Pas assez de données pour tracer ce graphique.', 12, 24); return; }
+    const m = { l: 44, r: 12, t: 12, b: 28 };
+    const xs = pts.map(p => p.temps_s), ys = pts.map(p => p[metric]);
+    const niceStep = v => { const p10 = Math.pow(10, Math.floor(Math.log10(v))), f = v / p10; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p10; };
+    const step = niceStep((Math.max(...ys) * 1.05 || 4) / 4);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y1 = step * 4;
+    const X = v => m.l + (x1 === x0 ? 0 : (v - x0) / (x1 - x0)) * (w - m.l - m.r);
+    const Y = v => h - m.b - (v / y1) * (h - m.t - m.b);
+    ctx.font = '12px "Segoe UI", sans-serif'; ctx.fillStyle = muted; ctx.strokeStyle = line; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const v = y1 * i / 4, y = Y(v);
+      ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(w - m.r, y); ctx.stroke();
+      ctx.textAlign = 'right'; ctx.fillText(fmt(v, 0) + ' m', m.l - 6, y + 4);
+    }
+    ctx.textAlign = 'center';
+    const tickN = Math.min(6, Math.max(1, Math.floor(x1 - x0)));
+    for (let i = 0; i <= tickN; i++) {
+      const v = x0 + (x1 - x0) * i / tickN; ctx.fillText(fmt(v, 0) + ' s', X(v), h - 8);
+    }
+    for (const id of result.teamIds) {
+      const series = pts.filter(p => p.equipe === id);
+      ctx.strokeStyle = teamColor(id); ctx.lineWidth = 2.5; ctx.beginPath();
+      series.forEach((p, i) => i ? ctx.lineTo(X(p.temps_s), Y(p[metric])) : ctx.moveTo(X(p.temps_s), Y(p[metric])));
+      ctx.stroke();
+    }
+    ctx.textAlign = 'left'; let lx = m.l + 8;
+    for (const id of result.teamIds) {
+      ctx.fillStyle = teamColor(id); ctx.fillRect(lx, m.t + 2, 10, 10);
+      ctx.fillStyle = ink; ctx.fillText('Équipe ' + id, lx + 15, m.t + 11); lx += 90;
+    }
+  }
+  window.addEventListener('resize', () => { if (result) drawChart(); });
+
+  // ---- exports ----------------------------------------------------------------------
+  function saveBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  $('dlCsv').addEventListener('click', () => {
+    const rows = ['frame;time_s;tracker_id;role;team;segment;x_cm;y_cm;vitesse_kmh;interpole'];
+    for (const t of result.tracks) {
+      for (let i = 0; i < t.n; i++) {
+        if (t.segment[i] < 0) continue;
+        const f = t.f0 + i;
+        rows.push([f, (f / result.fps).toFixed(2), t.tid, t.role, Number.isNaN(t.team) ? '' : t.team,
+          t.segment[i], t.x[i].toFixed(1), t.y[i].toFixed(1),
+          Number.isNaN(t.v[i]) ? '' : t.v[i].toFixed(1), t.interpole[i]].join(';'));
+      }
+    }
+    saveBlob(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' }), 'positions_nettoyees.csv');
+  });
+
+  $('dlXlsx').addEventListener('click', () => {
+    if (typeof XLSX === 'undefined') {
+      showError('La bibliothèque d’export Excel n’a pas pu se charger (pas de connexion ?). Utilise le CSV des positions nettoyées, qui s’ouvre dans Excel.');
+      return;
+    }
+    const players = result.players.map(p => ({
+      'Joueur': p.joueur_id, 'Rôle': p.role, 'Équipe': p.equipe, 'Images validées': p.images_validees,
+      'Couverture (%)': p.couverture_pct, 'Distance validée (m)': p.distance_validee_m,
+      'Distance extrapolée (m)': p.distance_extrapolee_m, 'Vitesse moyenne (km/h)': p.vitesse_moy_kmh,
+      'Vitesse max (km/h)': p.vitesse_max_kmh, 'Interpolé (%)': p.pct_interpole,
+      'Positions écartées': p.positions_ecartees, 'Sauts détectés': p.sauts_detectes,
+    }));
+    const teams = result.teams.map(t => ({
+      'Équipe': t.equipe, 'Joueurs de champ suivis': t.joueurs_suivis,
+      'Joueurs détectés par image': t.effectif_moyen_par_image, 'Centre x (m)': t.centre_x_moyen_m,
+      'Centre y (m)': t.centre_y_moyen_m, 'Largeur (m)': t.largeur_moyenne_m,
+      'Profondeur (m)': t.profondeur_moyenne_m, 'Compacité (m)': t.compacite_moyenne_m,
+      'Distance validée par joueur (m)': t.distance_validee_moy_m,
+      'Distance extrapolée par joueur (m)': t.distance_extrapolee_moy_m,
+      'Vitesse moyenne (km/h)': t.vitesse_moy_kmh, 'Part de vidéo exploitable (%)': t.couverture_moy_pct,
+    }));
+    const perSecond = result.perSecond.map(p => ({
+      'Équipe': p.equipe, 'Temps (s)': p.temps_s, 'Joueurs': p.joueurs, 'Centre x (m)': p.centre_x_m,
+      'Centre y (m)': p.centre_y_m, 'Largeur (m)': p.largeur_m, 'Profondeur (m)': p.profondeur_m,
+      'Compacité (m)': p.compacite_m,
+    }));
+    const wb = XLSX.utils.book_new();
+    const add = (name, rows, widths) => {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = widths.map(wch => ({ wch }));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    };
+    add('Joueurs', players, [9, 10, 8, 16, 14, 20, 24, 22, 18, 14, 18, 15]);
+    add('Equipes', teams, [8, 22, 24, 14, 14, 12, 15, 14, 30, 33, 22, 28]);
+    add('Equipes_par_seconde', perSecond, [8, 10, 9, 14, 14, 12, 15, 14]);
+    add('Notes', result.notes.map(n => ({ 'Notes': n })), [140]);
+    XLSX.writeFile(wb, 'analyse.xlsx');
+  });
+})();
+</script>
+</body>
+</html>
