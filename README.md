@@ -11,7 +11,7 @@ L'outil se compose de deux parties :
 1. **Sur un PC Windows** : la vidéo est analysée par l'IA et transformée en fichier `positions.csv` (une ligne par joueur et par image). Cette partie demande une installation (voir plus bas) et, idéalement, une carte graphique Nvidia.
 2. **Sur la page web** : le fichier `positions.csv` est déposé sur la page, qui calcule les statistiques directement dans le navigateur. Aucune installation n'est nécessaire.
 
-Page web : `https://sylvain82.github.io/analyse-match/)` (adresse de ce dépôt sur GitHub Pages)
+Page web : `https://<compte>.github.io/<depot>/` (adresse de ce dépôt sur GitHub Pages)
 
 Si tu as déjà un `positions.csv`, la page web suffit.
 
@@ -35,7 +35,8 @@ L'installation ne touche pas au reste de ton système : tout est dans `outils\mo
 1. Double-clique sur **`outils\lancer_app.bat`**. Ton navigateur s'ouvre sur l'application.
 2. Choisis « Une vidéo de match » et dépose ta vidéo. Pour un premier essai, règle « Analyser seulement les N premières secondes » sur 30.
 3. Lance l'analyse et ne touche à rien pendant le calcul.
-4. Télécharge l'Excel, les CSV ou la vidéo avec le radar.
+4. Les résultats s'affichent dans des onglets : statistiques par équipe et par joueur, cartes de chaleur, **radar image par image** (un curseur pour parcourir le match vu de dessus), **contenu des CSV créés** (avec filtres par rôle, équipe et joueur) et liste des fichiers produits.
+5. Télécharge l'Excel, les CSV ou la vidéo avec le radar. Tout est aussi enregistré dans le dossier `analyses`, à côté des scripts.
 
 Tu peux aussi déposer directement un `positions.csv` déjà produit : l'application ne refait alors que les statistiques.
 
