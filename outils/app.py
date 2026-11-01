@@ -20,7 +20,7 @@ import traceback
 import pandas as pd
 import streamlit as st
 
-from analyse_positions import TEAM_COLORS, draw_pitch, run_analysis
+from analyse_positions import TEAM_COLORS, draw_pitch, run_analysis, write_raw_excel
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, 'data')
@@ -162,7 +162,9 @@ if mode == MODE_VIDEO:
 else:
     uploaded = st.file_uploader('Dépose ton fichier positions.csv', type=['csv'])
 
-go = st.button("Lancer l'analyse", type='primary', disabled=uploaded is None)
+st.caption("Un seul clic : détection des joueurs, Excel des données brutes, nettoyage, "
+           "puis affichage des données nettoyées.")
+go = st.button("Lancer l'analyse complète", type='primary', disabled=uploaded is None)
 
 if go and uploaded is not None:
     st.session_state.pop('result', None)
@@ -185,29 +187,37 @@ if go and uploaded is not None:
                 trim_video(source, trimmed, seconds)
                 source = trimmed
 
-            bar = st.progress(0.0, text='Étape 1/3 : reconnaissance des équipes '
+            bar = st.progress(0.0, text='Étape 1/4 : reconnaissance des équipes '
                                         '(quelques minutes, sans barre de progression)…')
 
             def on_progress(done, total):
                 if total:
                     bar.progress(min(done / total, 1.0),
-                                 text=f'Étape 2/3 : analyse des images ({done}/{total})')
+                                 text=f'Étape 2/4 : analyse des images ({done}/{total})')
                 else:
-                    bar.progress(0.5, text=f'Étape 2/3 : analyse des images ({done})')
+                    bar.progress(0.5, text=f'Étape 2/4 : analyse des images ({done})')
 
             csv_path, radar_path = process_video(source, run_dir, device, on_progress)
-            bar.progress(1.0, text='Étape 3/3 : calcul des statistiques…')
         else:
             csv_path = os.path.join(run_dir, 'positions.csv')
             with open(csv_path, 'wb') as f:
                 f.write(uploaded.getbuffer())
 
+        # Excel des données brutes, créé avant tout nettoyage
+        raw_xlsx = os.path.join(run_dir, 'donnees_brutes.xlsx')
+        if mode == MODE_VIDEO:
+            bar.progress(1.0, text='Étape 3/4 : Excel des données brutes…')
+        raw_ok = write_raw_excel(csv_path, raw_xlsx)
+
+        if mode == MODE_VIDEO:
+            bar.progress(1.0, text='Étape 4/4 : nettoyage et statistiques…')
         result = run_analysis(
             csv_path, out_dir=os.path.join(run_dir, 'analyse'),
             min_frames=int(min_frames), max_gap=int(max_gap),
             outlier_cm=float(outlier_cm), jump_cm=float(jump_cm),
             min_segment=int(min_segment), log=lambda msg: None)
-        result.update(run_dir=run_dir, radar_path=radar_path, raw_csv=csv_path)
+        result.update(run_dir=run_dir, radar_path=radar_path, raw_csv=csv_path,
+                      raw_xlsx=raw_xlsx if raw_ok else None)
         st.session_state['result'] = result
     except (ValueError, FileNotFoundError) as err:
         st.error(str(err))
@@ -225,9 +235,13 @@ if result:
             "(changements de plan, zoom). Les statistiques d'équipe sont les plus fiables ; "
             "les distances et vitesses sont des estimations, la vitesse maximale surtout.")
 
-    tab_eq, tab_pl, tab_maps, tab_radar, tab_data, tab_notes, tab_dl = st.tabs(
-        ['Équipes', 'Joueurs', 'Cartes', 'Radar image par image', 'Données (CSV)',
-         'Méthode et limites', 'Téléchargements'])
+    clean_df = load_csv(result['clean_csv'], os.path.getmtime(result['clean_csv']))
+    raw_df = load_csv(result['raw_csv'], os.path.getmtime(result['raw_csv']))
+
+    (tab_clean, tab_eq, tab_pl, tab_radar, tab_maps, tab_raw,
+     tab_notes, tab_dl) = st.tabs(
+        ['Données nettoyées', 'Équipes', 'Joueurs', 'Radar image par image', 'Cartes',
+         'Données brutes', 'Méthode et limites', 'Téléchargements'])
 
     with tab_eq:
         st.dataframe(result['teams'], hide_index=True)
@@ -249,9 +263,6 @@ if result:
             with col:
                 st.image(img)
 
-    clean_df = load_csv(result['clean_csv'], os.path.getmtime(result['clean_csv']))
-    raw_df = load_csv(result['raw_csv'], os.path.getmtime(result['raw_csv']))
-
     with tab_radar:
         if clean_df.empty:
             st.info('Aucune position fiable à afficher.')
@@ -266,27 +277,28 @@ if result:
             import matplotlib.pyplot as plt
             plt.close(fig)
 
-    with tab_data:
-        which = st.radio(
-            'Fichier à afficher',
-            ['Positions nettoyées (positions_nettoyees.csv)', 'Positions brutes (positions.csv)'],
-            horizontal=True)
-        if which.startswith('Positions nettoyées'):
-            st.caption('Positions fiables, lissées, en centimètres sur le terrain (x de 0 à 12000, '
-                       'y de 0 à 7000), avec la vitesse et un indicateur de position reconstituée.')
-            show_table(clean_df, 'clean', 'positions_nettoyees_selection.csv')
-        else:
-            st.caption('Sortie directe de la détection, avant correction des équipes et nettoyage.')
-            show_table(raw_df, 'raw', 'positions_selection.csv')
+    with tab_clean:
+        st.caption('Positions fiables, lissées, en centimètres sur le terrain (x de 0 à 12000, '
+                   'y de 0 à 7000), avec la vitesse et un indicateur de position reconstituée.')
+        show_table(clean_df, 'clean', 'positions_nettoyees_selection.csv')
+
+    with tab_raw:
+        st.caption('Sortie directe de la détection, avant correction des équipes et nettoyage.')
+        show_table(raw_df, 'raw', 'positions_selection.csv')
 
     with tab_notes:
         for note in result['notes']:
             st.markdown('- ' + note)
 
     with tab_dl:
+        if result.get('raw_xlsx'):
+            st.download_button(
+                'Excel des données brutes (donnees_brutes.xlsx)', read_bytes(result['raw_xlsx']),
+                file_name='donnees_brutes.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if result['xlsx_path']:
             st.download_button(
-                'Classeur Excel (analyse.xlsx)', read_bytes(result['xlsx_path']),
+                'Classeur Excel nettoyé et statistiques (analyse.xlsx)', read_bytes(result['xlsx_path']),
                 file_name='analyse.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         st.download_button(
