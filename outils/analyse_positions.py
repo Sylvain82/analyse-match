@@ -40,6 +40,7 @@ CENTRE_CIRCLE_R = 915
 PENALTY_SPOT = 1100
 
 TEAM_COLORS = {0: '#00BFFF', 1: '#FF1493'}
+EXCEL_MAX_ROWS = 1_000_000  # limite d'une feuille Excel : 1 048 576 lignes
 
 
 # ----------------------------------------------------------------------------
@@ -305,7 +306,8 @@ def write_excel(path, sheets: dict, notes: list, images: list) -> bool:
 
         header_fill = PatternFill('solid', fgColor='D9E1F2')
         for ws in wb.worksheets:
-            for row in ws.iter_rows():
+            rows_to_style = ws.iter_rows() if ws.max_row <= 3000 else ws.iter_rows(max_row=1)
+            for row in rows_to_style:
                 for cell in row:
                     cell.font = Font(name='Arial', size=10, bold=(cell.row == 1))
             for cell in ws[1]:
@@ -324,6 +326,34 @@ def write_excel(path, sheets: dict, notes: list, images: list) -> bool:
             img.width, img.height = 640, 384
             ws.add_image(img, f'A{row}')
             row += 21
+    return True
+
+
+def write_raw_excel(csv_path: str, xlsx_path: str) -> bool:
+    """Excel des donnees brutes (sortie directe de la detection, avant nettoyage).
+
+    Retourne False si openpyxl manque ou si le fichier depasse la taille d'une
+    feuille Excel (les donnees restent alors disponibles dans le CSV).
+    """
+    try:
+        import openpyxl  # noqa: F401
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return False
+    df = load_positions(csv_path)
+    if len(df) > EXCEL_MAX_ROWS:
+        return False
+    with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Donnees_brutes', index=False)
+        ws = writer.sheets['Donnees_brutes']
+        for cell in ws[1]:
+            cell.font = Font(name='Arial', size=10, bold=True)
+            cell.fill = PatternFill('solid', fgColor='D9E1F2')
+            cell.alignment = Alignment(vertical='center')
+        for i, name in enumerate(df.columns, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = max(len(str(name)) + 4, 12)
+        ws.freeze_panes = 'A2'
     return True
 
 
@@ -460,6 +490,11 @@ def run_analysis(csv_path: str, out_dir: str = None, min_frames: int = 50,
         'Equipes': teams,
         'Equipes_par_seconde': per_second,
     }
+    if len(clean) <= EXCEL_MAX_ROWS:
+        sheets['Donnees_nettoyees'] = clean
+    else:
+        notes.append('Les positions nettoyées sont trop nombreuses pour une feuille Excel : '
+                     'elles sont uniquement dans positions_nettoyees.csv.')
     xlsx_path = os.path.join(out_dir, 'analyse.xlsx')
     excel_ok = write_excel(xlsx_path, sheets, notes, images)
     if excel_ok:
