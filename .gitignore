@@ -1,0 +1,16 @@
+# Donnees et resultats : ne jamais les publier
+*.csv
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.pt
+*.xlsx
+data/
+analyse/
+analyses/
+
+# Installation locale (cree par installer.bat)
+outils/moteur/
+venv/
+__pycache__/
