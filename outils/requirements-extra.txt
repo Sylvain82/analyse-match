@@ -1,8 +1,0 @@
-# Bibliotheques ajoutees par installer.bat en plus de celles de roboflow/sports
-supervision==0.25.1
-gdown
-pandas
-scipy
-matplotlib
-openpyxl
-streamlit
