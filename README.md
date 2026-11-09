@@ -126,4 +126,3 @@ outils/
 - La licence AGPL-3.0 d'Ultralytics impose des obligations si tu proposes l'outil comme service à d'autres personnes. Pour un usage personnel, elle ne pose pas de difficulté.
 - Calibration optionnelle : [PnLCalib](https://github.com/mguti97/PnLCalib) (code et poids sous leurs propres licences, à vérifier).
 - Page web : export Excel avec [SheetJS](https://sheetjs.com/).
-- **À toi d'ajouter ici la licence de ton propre code** (par exemple MIT) et un fichier `LICENSE`.
